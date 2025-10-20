@@ -76,8 +76,10 @@ ALTER TABLE reactions ENABLE ROW LEVEL SECURITY;
 -- Create policies (allow public read/write for now - you can restrict later)
 CREATE POLICY "Allow public read access" ON automations FOR SELECT USING (true);
 CREATE POLICY "Allow public insert access" ON automations FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update access" ON automations FOR UPDATE USING (true);
 CREATE POLICY "Allow public read access" ON automation_links FOR SELECT USING (true);
 CREATE POLICY "Allow public insert access" ON automation_links FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public delete access" ON automation_links FOR DELETE USING (true);
 CREATE POLICY "Allow public read access" ON reactions FOR SELECT USING (true);
 CREATE POLICY "Allow public insert access" ON reactions FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update access" ON reactions FOR UPDATE USING (true);
