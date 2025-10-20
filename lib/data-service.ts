@@ -1,15 +1,27 @@
 import { createClient } from '@supabase/supabase-js';
 import { Automation, NewAutomationInput } from '@/types/automation';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// Lazy initialization of Supabase client to avoid build-time errors
+let supabase: ReturnType<typeof createClient> | null = null;
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+function getSupabaseClient() {
+  if (!supabase) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase environment variables are not configured');
+    }
+
+    supabase = createClient(supabaseUrl, supabaseAnonKey);
+  }
+  return supabase;
+}
 
 export class DataService {
   // GET all automations
   static async getAllAutomations(): Promise<Automation[]> {
-    const { data: automations, error: automationsError } = await supabase
+    const { data: automations, error: automationsError } = await getSupabaseClient()
       .from('automations')
       .select('*')
       .order('submission_date', { ascending: false });
@@ -18,7 +30,7 @@ export class DataService {
 
     // Fetch links and reactions for each automation
     const automationsWithRelations = await Promise.all(
-      (automations || []).map(async (automation) => {
+      (automations || []).map(async (automation: any) => {
         const [links, reactions] = await Promise.all([
           this.getLinksForAutomation(automation.id),
           this.getReactionsForAutomation(automation.id)
@@ -51,7 +63,7 @@ export class DataService {
 
   // GET single automation by ID
   static async getAutomationById(id: string): Promise<Automation | null> {
-    const { data: automation, error } = await supabase
+    const { data: automation, error } = await getSupabaseClient()
       .from('automations')
       .select('*')
       .eq('id', id)
@@ -64,16 +76,17 @@ export class DataService {
       this.getReactionsForAutomation(id)
     ]);
 
+    const data: any = automation;
     return {
-      id: automation.id,
-      title: automation.title,
-      description: automation.description,
-      studentName: automation.student_name,
-      submissionDate: automation.submission_date,
-      tags: automation.tags,
-      images: automation.images,
-      setupInstructions: automation.setup_instructions,
-      installationCode: automation.installation_code,
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      studentName: data.student_name,
+      submissionDate: data.submission_date,
+      tags: data.tags,
+      images: data.images,
+      setupInstructions: data.setup_instructions,
+      installationCode: data.installation_code,
       links,
       reactions
     } as Automation;
@@ -81,8 +94,9 @@ export class DataService {
 
   // POST new automation
   static async createAutomation(input: NewAutomationInput): Promise<Automation> {
-    const { data: automation, error } = await supabase
-      .from('automations')
+    const supabase = getSupabaseClient();
+    const { data: automation, error } = await (supabase
+      .from('automations') as any)
       .insert({
         title: input.title,
         description: input.description,
@@ -97,25 +111,27 @@ export class DataService {
 
     if (error) throw error;
 
+    const data: any = automation;
     // Insert links
     if (input.links.length > 0) {
       const linksToInsert = input.links.map(link => ({
-        automation_id: automation.id,
+        automation_id: data.id,
         title: link.title,
         url: link.url
       }));
 
-      await supabase.from('automation_links').insert(linksToInsert);
+      await (supabase.from('automation_links') as any).insert(linksToInsert);
     }
 
-    return this.getAutomationById(automation.id) as Promise<Automation>;
+    return this.getAutomationById(data.id) as Promise<Automation>;
   }
 
   // PUT update automation
   static async updateAutomation(id: string, input: NewAutomationInput): Promise<Automation | null> {
+    const supabase = getSupabaseClient();
     // Update the automation
-    const { error: updateError } = await supabase
-      .from('automations')
+    const { error: updateError } = await (supabase
+      .from('automations') as any)
       .update({
         title: input.title,
         description: input.description,
@@ -151,8 +167,8 @@ export class DataService {
         url: link.url
       }));
 
-      const { error: insertError } = await supabase
-        .from('automation_links')
+      const { error: insertError } = await (supabase
+        .from('automation_links') as any)
         .insert(linksToInsert);
 
       if (insertError) {
@@ -166,6 +182,7 @@ export class DataService {
 
   // POST add reaction to automation
   static async addReaction(automationId: string, emoji: string): Promise<Automation | null> {
+    const supabase = getSupabaseClient();
     // Try to increment existing reaction
     const { data: existing } = await supabase
       .from('reactions')
@@ -174,14 +191,15 @@ export class DataService {
       .eq('emoji', emoji)
       .single();
 
-    if (existing) {
-      await supabase
-        .from('reactions')
-        .update({ count: existing.count + 1 })
-        .eq('id', existing.id);
+    const existingData: any = existing;
+    if (existingData) {
+      await (supabase
+        .from('reactions') as any)
+        .update({ count: existingData.count + 1 })
+        .eq('id', existingData.id);
     } else {
-      await supabase
-        .from('reactions')
+      await (supabase
+        .from('reactions') as any)
         .insert({
           automation_id: automationId,
           emoji,
@@ -194,20 +212,20 @@ export class DataService {
 
   // GET all unique tags
   static async getAllTags(): Promise<string[]> {
-    const { data: automations } = await supabase
+    const { data: automations } = await getSupabaseClient()
       .from('automations')
       .select('tags');
 
     if (!automations) return [];
 
     const tagSet = new Set<string>();
-    automations.forEach(a => a.tags?.forEach((tag: string) => tagSet.add(tag)));
+    automations.forEach((a: any) => a.tags?.forEach((tag: string) => tagSet.add(tag)));
     return Array.from(tagSet).sort();
   }
 
   // Helper: Get links for an automation
   private static async getLinksForAutomation(automationId: string) {
-    const { data: links } = await supabase
+    const { data: links } = await getSupabaseClient()
       .from('automation_links')
       .select('title, url')
       .eq('automation_id', automationId);
@@ -217,7 +235,7 @@ export class DataService {
 
   // Helper: Get reactions for an automation
   private static async getReactionsForAutomation(automationId: string) {
-    const { data: reactions } = await supabase
+    const { data: reactions } = await getSupabaseClient()
       .from('reactions')
       .select('emoji, count')
       .eq('automation_id', automationId);
